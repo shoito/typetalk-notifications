@@ -1,0 +1,10 @@
+{
+  "appName": {
+    "message": "Typetalk Notifications",
+    "description": "The name of the application"
+  },
+  "appDescription": {
+    "message": "Typetalkの未読通知数を表示します。このボタンをクリックしてTypetalkを開くこともできます。",
+    "description": "The description of the application"
+  }
+}
