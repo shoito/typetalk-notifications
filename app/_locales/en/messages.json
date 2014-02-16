@@ -4,7 +4,7 @@
     "description": "The name of the application"
   },
   "appDescription": {
-    "message": "View notifications of Typetalk, without opening a Typetalk tab.",
+    "message": "Shows a tooltip with your unread notifications from Typetalk",
     "description": "The description of the application"
   }
 }
