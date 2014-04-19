@@ -6,5 +6,14 @@
   "appDescription": {
     "message": "Shows a tooltip with your unread notifications from Typetalk",
     "description": "The description of the application"
+  },
+  "notoken": {
+    "message": "Failed to Authenticate. Please try again."
+  },
+  "nonotification": {
+    "message": "No notifications from Typetalk"
+  },
+  "hasnotification": {
+    "message": ""
   }
 }

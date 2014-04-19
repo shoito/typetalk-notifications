@@ -1,8 +1,11 @@
 'use strict';
 
-var CLIENT_ID = '{{env.typetalk.clientId}}',
-    CLIENT_SECRET = '{{env.typetalk.clientSecret}}',
+var CLIENT_ID = '{{typetalk.clientId}}',
+    CLIENT_SECRET = '{{typetalk.clientSecret}}',
     typetalk = new Typetalk(CLIENT_ID, CLIENT_SECRET),
+    ICON_HAS_NOTIFICATION = 'images/icon-19.png',
+    ICON_NO_NOTIFICATION = 'images/icon-19-off.png',
+    ICON_NO_TOKEN = 'images/icon-19-notoken.png',
     pollInterval = 1000 * 60 * 1, // TODO configureable
     pollIntervalId = setInterval(checkNotifications, pollInterval);
 
@@ -16,16 +19,21 @@ function checkNotifications() {
                     typetalk.refreshAccessToken(function(data, xhr) {
                         if (data === null) {
                             typetalk.clearTokens();
-                            setBadgeNumber('');
+                            updateBrowserActionButton(ICON_NO_TOKEN, '');
                         } else {
                             checkNotifications();
                         }
                     });
                 }
             } else {
-                setBadgeNumber(countNotifications(data));
+                var count = countNotifications(data);
+                updateBrowserActionButton(
+                    count > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION,
+                    count > 0 ? '' + count : '');
             }
         });
+    } else {
+        updateBrowserActionButton(ICON_NO_TOKEN, '');
     }
 }
 
@@ -38,23 +46,30 @@ function countNotifications(notifications) {
     return count;
 }
 
-function setBadgeNumber(number) {
-    if (number > 0) {
-        chrome.browserAction.setBadgeText({'text': '' + number});
-        chrome.browserAction.setIcon({'path': 'images/icon-19.png'});
+function updateBrowserActionButton(icon, badgeNumber) {
+    chrome.browserAction.setBadgeText({'text': '' + badgeNumber});
+    chrome.browserAction.setIcon({'path': icon});
+    chrome.browserAction.setTitle({'title': getTooltip(icon)});
+}
+
+function getTooltip(icon) {
+    var tooltip = '';
+    if (icon === ICON_NO_TOKEN) {
+        tooltip = chrome.i18n.getMessage('notoken');
+    } else if (icon === ICON_NO_NOTIFICATION) {
+        tooltip = chrome.i18n.getMessage('nonotification');
     } else {
-        chrome.browserAction.setBadgeText({'text': ''});
-        chrome.browserAction.setIcon({'path': 'images/icon-19-off.png'});
+        tooltip = chrome.i18n.getMessage('hasnotification');
     }
+    return tooltip;
 }
 
 function logout() {
     typetalk.clearTokens();
-    setBadgeNumber('');
+    updateBrowserActionButton(ICON_NO_TOKEN, '');
 };
 
 chrome.runtime.onInstalled.addListener(function (details) {
-    console.log('previousVersion', details.previousVersion);
 });
 
 chrome.browserAction.onClicked.addListener(function() {

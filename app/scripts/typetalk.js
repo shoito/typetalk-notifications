@@ -38,14 +38,14 @@
         }
 
         Typetalk.prototype.hasTokens = function() {
-            return this.accessToken !== null && this.refreshToken !== null;
+            return !!this.accessToken && !!this.refreshToken;
         };
 
         Typetalk.prototype.loadTokens = function() {
             var self = this;
             storage.get(['access_token', 'refresh_token'], 
                 function(tokens) {
-                    if(chrome.extension.lastError !== undefined) {
+                    if(chrome.extension.lastError !== void 0) {
                         console.error(chrome.extension.lastError);
                         self.accessToken = null;
                         self.refreshToken = null;
@@ -65,6 +65,9 @@
                             + '&scope=topic.read,topic.post,my&response_type=code',
                     'interactive':true}, 
                 function(authorizeResponse) {
+                    if (authorizeResponse === void 0) {
+                        throw new Error("authorizeResponse is undefined");
+                    }
                     var code = authorizeResponse.match('code=(.+)')[1];
                     self.getAccessToken(code);
                 }
@@ -144,7 +147,7 @@
                     'access_token': accessToken,
                     'refresh_token': refreshToken},
                 function() {
-                    if(chrome.extension.lastError !== undefined) {
+                    if(chrome.extension.lastError !== void 0) {
                         console.error(chrome.extension.lastError);
                     }
                 }

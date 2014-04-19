@@ -21,10 +21,12 @@ module.exports = function (grunt) {
     var yeomanConfig = {
         app: 'app',
         dist: 'dist'
-    };
+    },
+    target = grunt.option('target') || 'dev';
 
     grunt.initConfig({
         yeoman: yeomanConfig,
+        env: require('./.env.json'),
         watch: {
             options: {
                 spawn: false
@@ -272,6 +274,36 @@ module.exports = function (grunt) {
                     dest: ''
                 }]
             }
+        },
+        replace: {
+            dev: {
+                src: ['dist/scripts/background.js'],
+                overwrite: true,
+                replacements: [
+                    {
+                        from: /{{typetalk.clientId}}/g,
+                        to: '<%= env.dev.clientId %>'
+                    },
+                    {
+                        from: /{{typetalk.clientSecret}}/g,
+                        to: '<%= env.dev.clientSecret %>'
+                    }
+                ]
+            },
+            production: {
+                src: ['dist/scripts/background.js'],
+                overwrite: true,
+                replacements: [
+                    {
+                        from: /{{typetalk.clientId}}/g,
+                        to: '<%= env.production.clientId %>'
+                    },
+                    {
+                        from: /{{typetalk.clientSecret}}/g,
+                        to: '<%= env.production.clientSecret %>'
+                    }
+                ]
+            }
         }
     });
 
@@ -291,6 +323,7 @@ module.exports = function (grunt) {
         'concat',
         'uglify',
         'copy',
+        'replace:' + target,
         'usemin',
         'compress'
     ]);
