@@ -1,8 +1,13 @@
-node_modules
-temp
+.env.json
 .tmp
+
 dist
+temp
+
 .sass-cache
+
+package
+node_modules
+
 app/vendor
 test/vendor
-package
