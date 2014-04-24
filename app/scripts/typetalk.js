@@ -2,204 +2,123 @@
 
 (function() {
     var Typetalk = (function() {
-        var storage = chrome.storage.local;
+        var API_BASE_URL = 'https://typetalk.in/api/v1/',
+            OAUTH_BASE_URL = 'https://typetalk.in/oauth2/';
 
-        function Typetalk(clientId, clientSecret, requestTimeout) {
-            this.clientId = clientId;
-            this.clientSecret = clientSecret;
-            this.requestTimeout = requestTimeout || 3000;
+        function Typetalk(options) {
+            this.clientId = options.client_id;
+            this.clientSecret = options.client_secret;
+            this.redirectUri = options.redirect_uri;
+            this.requestTimeout = options.timeout || 3000;
+            this.scope = options.scope || 'topic.read,topic.post,my';
 
-            this.redirectUri = 'https://' + chrome.runtime.id + '.chromiumapp.org/provider_cb';
-            this.accessToken = null;
-            this.refreshToken = null;
-
-            this.loadTokens();
+            this.accessToken = options.access_token || null;
+            this.refreshToken = options.refresh_token || null;
         }
 
-        Typetalk.prototype.createTimeout = function(xhr, requestTimeout) {
-            return setTimeout(function() {
-                if (xhr.readyState < 4) {
-                    xhr.abort();
+        Typetalk.prototype.requestAccessToken = function(params) {
+            var self = this;
+            return new Promise(function(resolve, reject) {
+                var xhr = new XMLHttpRequest();
+                xhr.onload = function() {
+                    if (xhr.status === 200) {
+                        resolve(JSON.parse(xhr.responseText));
+                    } else {
+                        reject(JSON.parse(xhr.responseText));
+                    }
+                };
+
+                xhr.onerror = function() {
+                    reject(new Error(xhr.statusText));
                 }
-            }, requestTimeout);
+
+                xhr.open('POST', OAUTH_BASE_URL + 'access_token');
+                xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+                xhr.timeout = self.requestTimeout;
+                xhr.send(params);
+            });
         }
 
-        Typetalk.prototype.validateAccessTokenSync = function() {
-            if (!this.accessToken) return false;
+        Typetalk.prototype.authorizeChromeApp = function() {
+            var self = this;
+            return new Promise(function(resolve, reject) {
+                var authorizeUrl = OAUTH_BASE_URL + 'authorize?client_id=' + self.clientId
+                                + '&redirect_uri=' + self.redirectUri
+                                + '&scope=' + self.scope + '&response_type=code';
+                chrome.identity.launchWebAuthFlow(
+                    {'url': authorizeUrl, 'interactive': true}, 
+                    function(responseUrl) {
+                        if (responseUrl === void 0) reject(new Error('response url is undefined'));
 
-            var xhr = new XMLHttpRequest(),
-                timerId = this.createTimeout(xhr, this.requestTimeout);
-            xhr.open('GET', 'https://typetalk.in/api/v1/profile', false);
-            xhr.setRequestHeader('Authorization', 'Bearer ' + this.accessToken);
-            xhr.send(null);
-            clearTimeout(timerId);
+                        var code = responseUrl.match('code=(.+)')[1];
+                        if (!code) reject(new Error('authorization code is undefined'));
 
-            return (xhr.status === 200);
-        }
+                        var param = 'client_id=' + self.clientId 
+                                    + '&client_secret=' + self.clientSecret
+                                    + '&redirect_uri=' + self.redirectUri
+                                    + '&grant_type=authorization_code'
+                                    + '&code=' + code;
+                        self.requestAccessToken(param).then(function(data) {
+                            resolve(data);
+                        }, function(err) {
+                            reject(err);
+                        });
+                    }
+                );
+            });
+        };
 
         Typetalk.prototype.hasTokens = function() {
             return !!this.accessToken && !!this.refreshToken;
         };
 
-        Typetalk.prototype.loadTokens = function() {
+        Typetalk.prototype.requestApi = function(url, method, params) {
             var self = this;
-            storage.get(['access_token', 'refresh_token'], 
-                function(tokens) {
-                    if(chrome.extension.lastError !== void 0) {
-                        console.error(chrome.extension.lastError);
-                        self.accessToken = null;
-                        self.refreshToken = null;
-                    } else {
-                        self.accessToken = tokens.access_token;
-                        self.refreshToken = tokens.refresh_token;
-                    }
-                }
-            );
-        };
+            return new Promise(function(resolve, reject) {
+                if (!self.accessToken) reject(new Error('access_token not found'));
 
-        Typetalk.prototype.authorize = function() {
-            var self = this;
-            chrome.identity.launchWebAuthFlow({
-                    'url': 'https://typetalk.in/oauth2/authorize?client_id=' + this.clientId
-                            + '&redirect_uri=' + this.redirectUri
-                            + '&scope=topic.read,topic.post,my&response_type=code',
-                    'interactive':true}, 
-                function(authorizeResponse) {
-                    if (authorizeResponse === void 0) {
-                        throw new Error("authorizeResponse is undefined");
-                    }
-                    var code = authorizeResponse.match('code=(.+)')[1];
-                    self.getAccessToken(code);
-                }
-            );
-        };
-
-        Typetalk.prototype.getAccessToken = function(code, callback) {
-            if (!code) return callback && callback(null, null);
-
-            var param = 'client_id=' + this.clientId 
-                        + '&client_secret=' + this.clientSecret
-                        + '&redirect_uri=' + this.redirectUri
-                        + '&grant_type=authorization_code'
-                        + '&code=' + code;
-            this.postToAccessTokenEndpoint(param, callback);
-        };
-
-        Typetalk.prototype.postToAccessTokenEndpoint = function(param, callback) {
-            var self = this,
-                xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function() {
-                if(xhr.readyState === 4) {
+                var xhr = new XMLHttpRequest();
+                xhr.onload = function() {
                     if (xhr.status === 200) {
-                        var resJson = JSON.parse(xhr.responseText);
-                        self.saveTokens(resJson.access_token, resJson.refresh_token);
-                        callback && callback(resJson, xhr);
+                        resolve(JSON.parse(xhr.responseText));
                     } else {
-                        callback && callback(null, xhr);
+                        reject(xhr.getAllResponseHeaders());
                     }
+                };
+
+                xhr.onerror = function() {
+                    reject(new Error(xhr.statusText));
                 }
-            };
-            xhr.open('POST', 'https://typetalk.in/oauth2/access_token');
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            xhr.timeout = this.requestTimeout;
-            xhr.send(param);
-        };
 
-        Typetalk.prototype.refreshAccessToken = function(callback) {
-            if (!this.refreshToken) return callback && callback(null, null);
+                xhr.open(method, url);
+                xhr.setRequestHeader('Authorization', 'Bearer ' + self.accessToken);
+                xhr.timeout = self.requestTimeout;
+                xhr.send(params);
+            });
+        }
 
+        Typetalk.prototype.validateAccessToken = function() {
+            return this.requestApi(API_BASE_URL + 'profile', 'GET', null);
+        }
+
+        Typetalk.prototype.refreshAccessToken = function() {
             var param = 'client_id=' + this.clientId 
                         + '&client_secret=' + this.clientSecret
                         + '&grant_type=refresh_token'
                         + '&refresh_token=' + this.refreshToken;
-            this.postToAccessTokenEndpoint(param, callback);
+            return this.requestAccessToken(param);
         };
 
-        Typetalk.prototype.refreshAccessTokenSync = function() {
-            if (!this.refreshToken) return false;
-
-            var xhr = new XMLHttpRequest(),
-                timerId = this.createTimeout(xhr, this.requestTimeout),
-                param = 'client_id=' + this.clientId 
-                        + '&client_secret=' + this.clientSecret
-                        + '&grant_type=refresh_token'
-                        + '&refresh_token=' + this.refreshToken;
-            xhr.open('POST', 'https://typetalk.in/oauth2/access_token', false);
-            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-            xhr.send(param);
-            clearTimeout(timerId);
-
-            if (xhr.status === 200) {
-                var resJson = JSON.parse(xhr.responseText);
-                this.saveTokens(resJson.access_token, resJson.refresh_token);
-                return true;
-            } else {
-                this.clearTokens();
-                return false;
-            }
+        Typetalk.prototype.getNotificationsStatus = function() {
+            return this.requestApi(API_BASE_URL + 'notifications/status', 'GET', null);
         };
 
-        Typetalk.prototype.saveTokens = function(accessToken, refreshToken) {
-            this.accessToken = accessToken;
-            this.refreshToken = refreshToken;
-
-            storage.set({
-                    'access_token': accessToken,
-                    'refresh_token': refreshToken},
-                function() {
-                    if(chrome.extension.lastError !== void 0) {
-                        console.error(chrome.extension.lastError);
-                    }
-                }
-            );
+        Typetalk.prototype.markReadNotifications = function() {
+            return this.requestApi(API_BASE_URL + 'notifications/open', 'PUT', null);
         };
 
-        Typetalk.prototype.clearTokens = function() {
-            this.accessToken = null;
-            this.refreshToken = null;
-            storage.remove(['access_token', 'refresh_token']);
-        };
-
-        Typetalk.prototype.getNotifications = function(callback) {
-            if (!this.accessToken) return callback && callback(null, null);
-
-            var self = this,
-                xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function() {
-                if(xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        var resJson = JSON.parse(xhr.responseText);
-                        callback && callback(resJson, xhr);
-                    } else {
-                        callback && callback(null, xhr);
-                    }
-                }
-            };
-            xhr.open('GET', 'https://typetalk.in/api/v1/notifications/status');
-            xhr.setRequestHeader('Authorization', 'Bearer ' + this.accessToken);
-            xhr.timeout = this.requestTimeout;
-            xhr.send(null);
-        };
-
-        Typetalk.prototype.readNotifications = function(callback) {
-            if (!this.accessToken) return callback && callback(null, null);
-
-            var self = this,
-                xhr = new XMLHttpRequest();
-            xhr.onreadystatechange = function() {
-                if(xhr.readyState === 4) {
-                    if (xhr.status === 200) {
-                        var resJson = JSON.parse(xhr.responseText);
-                        callback && callback(resJson, xhr);
-                    } else {
-                        callback && callback(null, xhr);
-                    }
-                }
-            };
-            xhr.open('PUT', 'https://typetalk.in/api/v1/notifications/open');
-            xhr.setRequestHeader('Authorization', 'Bearer ' + this.accessToken);
-            xhr.timeout = this.requestTimeout;
-            xhr.send(null);
+        Typetalk.prototype.getTopics = function() {
+            return this.requestApi(API_BASE_URL + 'topics', 'GET', null);
         };
 
         return Typetalk;
