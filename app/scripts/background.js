@@ -11,7 +11,7 @@ var tokens = loadTokens(),
     ICON_HAS_NOTIFICATION = 'images/icon-19.png',
     ICON_NO_NOTIFICATION = 'images/icon-19-off.png',
     ICON_NO_TOKEN = 'images/icon-19-notoken.png',
-    pollInterval = 1000 * 5 * 1, // TODO configureable
+    pollInterval = 1000 * 60 * 1, // TODO configureable
     pollIntervalId = setInterval(checkUnreads, pollInterval),
     notifications = 0,
     unreads = 0;
@@ -24,7 +24,7 @@ function checkUnreads() {
 }
 
 function checkNotifications() {
-    if (!typetalk.hasTokens()) {
+    if (!typetalk.hasActiveToken()) {
         updateBrowserActionButton(ICON_NO_TOKEN);
         return;
     }
@@ -63,7 +63,7 @@ function countNotifications(notifications) {
 }
 
 function checkTopics() {
-    if (!typetalk.hasTokens()) {
+    if (!typetalk.hasActiveToken()) {
         updateBrowserActionButton(ICON_NO_TOKEN);
         return;
     }
@@ -131,19 +131,36 @@ function refreshTokens(tokens) {
 }
 
 function loadTokens() {
-    var accessToken = localStorage['access_token'] || null,
-        refreshToken = localStorage['refresh_token'] || null;
-    return {'access_token': accessToken, 'refresh_token': refreshToken};
+    var token = {}, tokenJson = localStorage['token'];
+    if (tokenJson) {
+        token = JSON.parse(tokenJson);
+    }
+
+    return token;
 }
 
-function saveTokens(tokens) {
-    localStorage['access_token'] = tokens.accessToken;
-    localStorage['refresh_token'] = tokens.refreshToken;
+function saveTokens(options) {
+    ['access_token', 'refresh_token', 'expire_time'].forEach(function(field) {
+        if (options[field] === void 0) throw new Error(field + ' is required');
+    });
+
+    var current = loadTokens(),
+        refreshTokenExpires = current['refresh_token_expires'];
+    if (current['refresh_token'] !== options['refresh_token']) {
+        refreshTokenExpires = Date.now + 30 * 24 * 60 * 60;
+    }
+
+    var token = {
+        'access_token': options['access_token'],
+        'refresh_token': options['refresh_token'],
+        'access_token_expires': Date.now + options['expires_in'] * 1000,
+        'refresh_token_expires': refreshTokenExpires;
+    }
+    localStorage['token'] = JSON.stringify(token);
 };
 
 function clearTokens() {
-    delete localStorage['access_token'];
-    delete localStorage['refresh_token'];
+    delete localStorage['token'];
 };
 
 function logout() {
