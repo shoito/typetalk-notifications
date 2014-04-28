@@ -5,12 +5,13 @@
 
         Typetalk.API_BASE_URL = 'https://typetalk.in/api/v1/';
         Typetalk.OAUTH_BASE_URL = 'https://typetalk.in/oauth2/';
+        Typetalk.REFRESH_TOKEN_EXPIRES_IN = 30 * 24 * 60 * 60; // sec
 
-        var clientId,
+        var self,
+            clientId,
             clientSecret,
             redirectUri,
             scope = 'topic.read,topic.post,my',
-            timeout = 3000,
             tokenChangeListeners = [];
 
         function Typetalk(options) {
@@ -18,16 +19,17 @@
                 if (options[field] === void 0) throw new Error(field + ' is required');
             });
 
+            self = this;
             this.accessToken = options.access_token;
             this.refreshToken = options.refresh_token;
-            this.accessTokenExpires = options.access_token_expires;
-            this.refreshTokenExpires = options.refresh_token_expires;
+            this.accessTokenExpires = options.access_token_expires || 0;
+            this.refreshTokenExpires = options.refresh_token_expires || 0;
+            this.timeout = options.timeout || 3000;
 
             clientId = options.client_id;
             clientSecret = options.client_secret;
             redirectUri = options.redirect_uri;
             scope = options.scope || scope;
-            timeout = options.timeout || timeout;
         }
 
         var requestAccessToken = function(params) {
@@ -45,13 +47,12 @@
 
                 xhr.open('POST', Typetalk.OAUTH_BASE_URL + 'access_token');
                 xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-                xhr.timeout = timeout;
+                xhr.timeout = self.timeout;
                 xhr.send(params);
             });
         };
 
         var requestApi = function(url, method, params) {
-            var self = this;
             return new Promise(function(resolve, reject) {
                 if (!self.hasActiveToken()) reject(new Error('access_token is required'));
 
@@ -68,7 +69,7 @@
 
                 xhr.open(method, url);
                 xhr.setRequestHeader('Authorization', 'Bearer ' + self.accessToken);
-                xhr.timeout = timeout;
+                xhr.timeout = self.timeout;
                 xhr.send(params);
             });
         };
@@ -88,7 +89,6 @@
         };
 
         Typetalk.prototype.authorizeChromeApp = function() {
-            var self = this;
             return new Promise(function(resolve, reject) {
                 var authorizeUrl = Typetalk.OAUTH_BASE_URL + 'authorize?client_id=' + clientId
                                 + '&redirect_uri=' + redirectUri
@@ -112,15 +112,15 @@
         };
 
         Typetalk.prototype.hasActiveToken = function() {
-            return !!this.acsessTokenExpired() && !!this.refreshTokenExpired();
+            return !this.acsessTokenExpired() && !this.refreshTokenExpired();
         };
 
         Typetalk.prototype.acsessTokenExpired = function() {
-            return !!this.accessToken && (accessTokenExpires < Date.now());
+            return (this.accessToken === void 0) || (this.accessTokenExpires < Date.now());
         };
 
         Typetalk.prototype.refreshTokenExpired = function() {
-            return !!this.refreshToken && (refreshTokenExpires < Date.now());
+            return (this.refreshToken === void 0) || (this.refreshTokenExpires < Date.now());
         };
 
         Typetalk.prototype.validateAccessToken = function() {

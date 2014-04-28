@@ -1,17 +1,19 @@
 'use strict';
-
+// TODO xxx_expires ふよう
 var tokens = loadTokens(),
     typetalk = new Typetalk({
                     'client_id': '{{typetalk.clientId}}', 
                     'client_secret': '{{typetalk.clientSecret}}',
                     'redirect_uri': 'https://' + chrome.runtime.id + '.chromiumapp.org/provider_cb',
                     'access_token': tokens.access_token,
-                    'refresh_token': tokens.refresh_token
+                    'refresh_token': tokens.refresh_token,
+                    'access_token_expires': tokens.access_token_expires,
+                    'refresh_token_expires': tokens.refresh_token_expires
                 }),
     ICON_HAS_NOTIFICATION = 'images/icon-19.png',
     ICON_NO_NOTIFICATION = 'images/icon-19-off.png',
     ICON_NO_TOKEN = 'images/icon-19-notoken.png',
-    pollInterval = 1000 * 60 * 1, // TODO configureable
+    pollInterval = 1000 * 6 * 1, // TODO configureable
     pollIntervalId = setInterval(checkUnreads, pollInterval),
     notifications = 0,
     unreads = 0;
@@ -125,9 +127,23 @@ function getTooltip(icon) {
 }
 
 function refreshTokens(tokens) {
-    typetalk.accessToken = tokens.access_token;
-    typetalk.refreshToken = tokens.refresh_token;
-    saveTokens(tokens);
+    if (typetalk.accessToken !== tokens.access_token) {
+        typetalk.accessToken = tokens.access_token;
+        typetalk.accessTokenExpires = Date.now() + tokens.expires_in * 1000;
+    }
+
+    if (typetalk.refreshToken !== tokens.refresh_token) {
+        typetalk.refreshToken = tokens.refresh_token;
+        typetalk.refreshTokenExpires = Date.now() + Typetalk.REFRESH_TOKEN_EXPIRES_IN * 1000;
+    }
+
+    var token = {
+        'access_token': typetalk.accessToken,
+        'refresh_token': typetalk.refreshToken,
+        'access_token_expires': typetalk.accessTokenExpires,
+        'refresh_token_expires': typetalk.refreshTokenExpires
+    }
+    localStorage['token'] = JSON.stringify(token);
 }
 
 function loadTokens() {
@@ -138,26 +154,6 @@ function loadTokens() {
 
     return token;
 }
-
-function saveTokens(options) {
-    ['access_token', 'refresh_token', 'expire_time'].forEach(function(field) {
-        if (options[field] === void 0) throw new Error(field + ' is required');
-    });
-
-    var current = loadTokens(),
-        refreshTokenExpires = current['refresh_token_expires'];
-    if (current['refresh_token'] !== options['refresh_token']) {
-        refreshTokenExpires = Date.now + 30 * 24 * 60 * 60;
-    }
-
-    var token = {
-        'access_token': options['access_token'],
-        'refresh_token': options['refresh_token'],
-        'access_token_expires': Date.now + options['expires_in'] * 1000,
-        'refresh_token_expires': refreshTokenExpires;
-    }
-    localStorage['token'] = JSON.stringify(token);
-};
 
 function clearTokens() {
     delete localStorage['token'];
@@ -176,9 +172,9 @@ chrome.runtime.onInstalled.addListener(function (details) {
 });
 
 chrome.browserAction.onClicked.addListener(function() {
-    typetalk.validateAccessToken().then(function(data) {
+    if (typetalk.hasActiveToken()) {
         openTypetalkPage();
-    }, function(err) {
+    } else {
         typetalk.authorizeChromeApp().then(function(data) {
             refreshTokens(data);
             openTypetalkPage();
@@ -186,5 +182,5 @@ chrome.browserAction.onClicked.addListener(function() {
             console.error('authorizeChromeApp error:' + err);
             clearTokens();
         });
-    });
+    }
 });
