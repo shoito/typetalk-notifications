@@ -1,6 +1,6 @@
 {
   "name": "typetalk-notifications",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "dependencies": {
     "bluebird": "~1.2.4",
     "xmlhttprequest": "~1.6.0"
