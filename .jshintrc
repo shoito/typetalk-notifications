@@ -2,10 +2,12 @@
     "node": true,
     "browser": true,
     "esnext": true,
+    "expr": true,
     "bitwise": true,
-    "camelcase": true,
+    "camelcase": false,
     "curly": true,
     "eqeqeq": true,
+    "forin": true,
     "immed": true,
     "indent": 4,
     "latedef": true,
@@ -17,8 +19,14 @@
     "unused": true,
     "strict": true,
     "trailing": true,
+    "shadow": true,
     "smarttabs": true,
+    "sub": true,
+    "validthis": true,
     "globals" : {
-        "chrome": true
+        "Typetalk": true,
+        "chrome": true,
+        "Promise": true,
+        "XMLHttpRequest": true
     }
 }

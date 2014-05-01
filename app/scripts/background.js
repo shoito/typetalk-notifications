@@ -1,56 +1,28 @@
 'use strict';
 
-var CLIENT_ID = '{{typetalk.clientId}}',
-    CLIENT_SECRET = '{{typetalk.clientSecret}}',
-    typetalk = new Typetalk(CLIENT_ID, CLIENT_SECRET),
+function loadToken() {
+    var token = {}, tokenJson = localStorage['token'];
+    if (tokenJson) {
+        token = JSON.parse(tokenJson);
+    }
+
+    return token;
+}
+
+var token = loadToken(),
+    typetalk = new Typetalk({
+        'client_id': '{{typetalk.clientId}}',
+        'client_secret': '{{typetalk.clientSecret}}',
+        'redirect_uri': 'https://' + chrome.runtime.id + '.chromiumapp.org/provider_cb',
+        'access_token': token['access_token'],
+        'refresh_token': token['refresh_token'],
+        'scope': 'topic.read,topic.post,my'
+    }),
     ICON_HAS_NOTIFICATION = 'images/icon-19.png',
     ICON_NO_NOTIFICATION = 'images/icon-19-off.png',
     ICON_NO_TOKEN = 'images/icon-19-notoken.png',
-    pollInterval = 1000 * 60 * 1, // TODO configureable
-    pollIntervalId = setInterval(checkNotifications, pollInterval);
-
-setTimeout(checkNotifications, 300);
-
-function checkNotifications() {
-    if (typetalk.hasTokens()) {
-        typetalk.getNotifications(function(data, xhr) {
-            if (data === null) {
-                if (xhr && xhr.status === 401) {
-                    typetalk.refreshAccessToken(function(data, xhr) {
-                        if (data === null) {
-                            typetalk.clearTokens();
-                            updateBrowserActionButton(ICON_NO_TOKEN, '');
-                        } else {
-                            checkNotifications();
-                        }
-                    });
-                }
-            } else {
-                var count = countNotifications(data);
-                updateBrowserActionButton(
-                    count > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION,
-                    count > 0 ? '' + count : '');
-            }
-        });
-    } else {
-        updateBrowserActionButton(ICON_NO_TOKEN, '');
-    }
-}
-
-function countNotifications(notifications) {
-    var accessUnopened = notifications.access.unopened,
-        inviteTeamPending = notifications.invite.team.pending,
-        inviteTopicPending = notifications.invite.topic.pending,
-        mentionUnread = 0,//notifications.mention.unread, // FIXME
-        count = accessUnopened + inviteTeamPending + inviteTopicPending + mentionUnread;
-    return count;
-}
-
-function updateBrowserActionButton(icon, badgeNumber) {
-    chrome.browserAction.setBadgeText({'text': '' + badgeNumber});
-    chrome.browserAction.setIcon({'path': icon});
-    chrome.browserAction.setTitle({'title': getTooltip(icon)});
-}
+    notifications = 0,
+    unreads = 0;
 
 function getTooltip(icon) {
     var tooltip = '';
@@ -59,25 +31,141 @@ function getTooltip(icon) {
     } else if (icon === ICON_NO_NOTIFICATION) {
         tooltip = chrome.i18n.getMessage('nonotification');
     } else {
-        tooltip = chrome.i18n.getMessage('hasnotification');
+        if (notifications > 0) {
+            tooltip += '' + notifications + chrome.i18n.getMessage('notificationCountSuffix');
+        }
+        if (tooltip !== '' && unreads > 0) {
+            tooltip += '\n';
+        }
+        if (unreads > 0) {
+            tooltip += '' + unreads + chrome.i18n.getMessage('unreadCountSuffix');
+        }
     }
     return tooltip;
 }
 
-function logout() {
-    typetalk.clearTokens();
-    updateBrowserActionButton(ICON_NO_TOKEN, '');
-};
+function updateBrowserActionButton(icon, badgeNumber) {
+    if (badgeNumber > 0) {
+        chrome.browserAction.setBadgeText({'text': '' + badgeNumber});
+    }
+    chrome.browserAction.setIcon({'path': icon});
+    chrome.browserAction.setTitle({'title': getTooltip(icon)});
+}
 
-chrome.runtime.onInstalled.addListener(function (details) {
-});
+function refreshToken(token) {
+    if (typetalk.accessToken !== token.access_token) {
+        typetalk.accessToken = token.access_token;
+    }
+
+    if (typetalk.refreshToken !== token.refresh_token) {
+        typetalk.refreshToken = token.refresh_token;
+    }
+
+    var token = {
+        'access_token': typetalk.accessToken,
+        'refresh_token': typetalk.refreshToken
+    };
+    localStorage['token'] = JSON.stringify(token);
+}
+
+function clearToken() {
+    typetalk.clearToken();
+    delete localStorage['token'];
+}
+
+function countNotifications(notifications) {
+    var accessUnopened = notifications.access.unopened,
+        inviteTeamPending = notifications.invite.team.pending,
+        inviteTopicPending = notifications.invite.topic.pending,
+        count = accessUnopened + inviteTeamPending + inviteTopicPending;
+    return count;
+}
+
+function countUnreads(topics) {
+    var count = 0;
+    topics.forEach(function(topic) {
+        count += topic.unread.count;
+    });
+
+    return count;
+}
+
+function checkNotifications() {
+    if (!typetalk.hasToken()) {
+        updateBrowserActionButton(ICON_NO_TOKEN);
+        return;
+    }
+
+    typetalk.getNotificationCount().then(function(status) {
+        notifications = countNotifications(status);
+        var total = notifications + unreads;
+        updateBrowserActionButton(total > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION, total);
+    }, function(err) {
+        if (err.status === 400 || err.status === 401) {
+            typetalk.refreshAccessToken().then(function(token) {
+                refreshToken(token);
+                checkNotifications();
+            }, function() {
+                clearToken();
+                updateBrowserActionButton(ICON_NO_TOKEN);
+            });
+        }
+    });
+}
+
+function checkTopics() {
+    if (!typetalk.hasToken()) {
+        updateBrowserActionButton(ICON_NO_TOKEN);
+        return;
+    }
+
+    typetalk.getMyTopics().then(function(data) {
+        unreads = countUnreads(data.topics);
+        var total = notifications + unreads;
+        updateBrowserActionButton(total > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION, total);
+    }, function(err) {
+        if (err.status === 400 || err.status === 401) {
+            typetalk.refreshAccessToken().then(function(token) {
+                refreshToken(token);
+                checkTopics();
+            }, function() {
+                clearToken();
+                updateBrowserActionButton(ICON_NO_TOKEN);
+            });
+        }
+    });
+
+}
+
+function checkUnreads() {
+    checkNotifications();
+    checkTopics();
+}
+
+function authorize(successCallback, failedCallback) {
+    typetalk.authorizeChromeApp().then(function(token) {
+        refreshToken(token);
+        successCallback && successCallback();
+    }, function(err) {
+        console.error('authorizeChromeApp error:' + err);
+        clearToken();
+        failedCallback && failedCallback();
+    });
+}
+
+function openTypetalkPage() {
+    chrome.tabs.create({'url': 'https://typetalk.in/'}, function() {});
+}
+
+chrome.runtime.onInstalled.addListener(function() {});
 
 chrome.browserAction.onClicked.addListener(function() {
-    if (!typetalk.validateAccessTokenSync() && !typetalk.refreshAccessTokenSync()) {
-        typetalk.authorize();
-    } else {
-        // TODO popup.html
-        chrome.tabs.create({'url': 'https://typetalk.in/'}, function(tab) {
-        });
-    }
+    typetalk.validateAccessToken().then(function() {
+        openTypetalkPage();
+    }, function() {
+        authorize(openTypetalkPage);
+    });
 });
+
+setInterval(checkUnreads, 1000 * 60 * 1);
+setTimeout(checkUnreads, 1000);

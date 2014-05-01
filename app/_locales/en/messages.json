@@ -13,7 +13,10 @@
   "nonotification": {
     "message": "No notifications from Typetalk"
   },
-  "hasnotification": {
-    "message": ""
+  "notificationCountSuffix": {
+    "message": " notifications"
+  },
+  "unreadCountSuffix": {
+    "message": " unreads"
   }
 }
