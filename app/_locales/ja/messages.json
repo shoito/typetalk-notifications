@@ -13,7 +13,10 @@
   "nonotification": {
     "message": "通知はありません"
   },
-  "hasnotification": {
-    "message": ""
+  "notificationCountSuffix": {
+    "message": "件の未読通知"
+  },
+  "unreadCountSuffix": {
+    "message": "件の未読メッセージ"
   }
 }
