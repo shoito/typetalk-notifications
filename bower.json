@@ -1,6 +1,6 @@
 {
   "name": "typetalk-notifications",
-  "version": "0.1.7",
+  "version": "0.1.11",
   "dependencies": {
     "typetalk-js": "~0.1.1"
   },

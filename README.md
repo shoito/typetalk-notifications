@@ -11,6 +11,14 @@ Chromeウェブストア - https://chrome.google.com/webstore/detail/typetalk-no
 
 ![image](https://raw.github.com/shoito/typetalk-notifications/master/images/640x400_marked.png)
 
+typetalk-js
+-----
+JavaScript library for Typetalk
+
+typetalk-js aims to provide a complete, asynchronous client library for the Typetalk API.
+
+https://github.com/shoito/typetalk-js
+
 Typetalk
 -----
 Typetalk - http://www.typetalk.in
