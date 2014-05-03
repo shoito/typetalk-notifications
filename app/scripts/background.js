@@ -45,9 +45,10 @@ function getTooltip(icon) {
 }
 
 function updateBrowserActionButton(icon, badgeNumber) {
-    if (badgeNumber > 0) {
-        chrome.browserAction.setBadgeText({'text': '' + badgeNumber});
+    if (!(badgeNumber > 0)) {
+        badgeNumber = '';
     }
+    chrome.browserAction.setBadgeText({'text': '' + badgeNumber});
     chrome.browserAction.setIcon({'path': icon});
     chrome.browserAction.setTitle({'title': getTooltip(icon)});
 }
@@ -90,17 +91,21 @@ function countUnreads(topics) {
     return count;
 }
 
-function checkNotifications() {
+function checkUnreads() {
     if (!typetalk.hasToken()) {
         updateBrowserActionButton(ICON_NO_TOKEN);
         return;
     }
 
-    typetalk.getNotificationCount().then(function(status) {
-        notifications = countNotifications(status);
+    Promise.all([
+        typetalk.getNotificationCount(),
+        typetalk.getMyTopics()
+    ]).then(function(results) {
+        notifications = countNotifications(results[0]);
+        unreads = countUnreads(results[1].topics);
         var total = notifications + unreads;
         updateBrowserActionButton(total > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION, total);
-    }, function(err) {
+    }).catch(function(err) {
         if (err.status === 400 || err.status === 401) {
             typetalk.refreshAccessToken().then(function(token) {
                 refreshToken(token);
@@ -111,35 +116,6 @@ function checkNotifications() {
             });
         }
     });
-}
-
-function checkTopics() {
-    if (!typetalk.hasToken()) {
-        updateBrowserActionButton(ICON_NO_TOKEN);
-        return;
-    }
-
-    typetalk.getMyTopics().then(function(data) {
-        unreads = countUnreads(data.topics);
-        var total = notifications + unreads;
-        updateBrowserActionButton(total > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION, total);
-    }, function(err) {
-        if (err.status === 400 || err.status === 401) {
-            typetalk.refreshAccessToken().then(function(token) {
-                refreshToken(token);
-                checkTopics();
-            }, function() {
-                clearToken();
-                updateBrowserActionButton(ICON_NO_TOKEN);
-            });
-        }
-    });
-
-}
-
-function checkUnreads() {
-    checkNotifications();
-    checkTopics();
 }
 
 function authorize(successCallback, failedCallback) {
@@ -163,7 +139,10 @@ chrome.browserAction.onClicked.addListener(function() {
     typetalk.validateAccessToken().then(function() {
         openTypetalkPage();
     }, function() {
-        authorize(openTypetalkPage);
+        authorize(function() {
+            openTypetalkPage();
+            checkUnreads();
+        });
     });
 });
 
