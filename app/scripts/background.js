@@ -16,7 +16,7 @@ var token = loadToken(),
         'redirect_uri': 'https://' + chrome.runtime.id + '.chromiumapp.org/provider_cb',
         'access_token': token['access_token'],
         'refresh_token': token['refresh_token'],
-        'scope': 'topic.read,topic.post,my'
+        'scope': 'my'
     }),
     ICON_HAS_NOTIFICATION = 'images/icon-19.png',
     ICON_NO_NOTIFICATION = 'images/icon-19-off.png',
@@ -45,7 +45,7 @@ function getTooltip(icon) {
 }
 
 function updateBrowserActionButton(icon, badgeNumber) {
-    if (!(badgeNumber > 0)) {
+    if ((badgeNumber > 0) === false) {
         badgeNumber = '';
     }
     chrome.browserAction.setBadgeText({'text': '' + badgeNumber});
@@ -109,7 +109,7 @@ function checkUnreads() {
         if (err.status === 400 || err.status === 401) {
             typetalk.refreshAccessToken().then(function(token) {
                 refreshToken(token);
-                checkNotifications();
+                checkUnreads();
             }, function() {
                 clearToken();
                 updateBrowserActionButton(ICON_NO_TOKEN);
