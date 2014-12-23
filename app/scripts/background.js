@@ -16,8 +16,9 @@ var token = loadToken(),
         'redirect_uri': 'https://' + chrome.runtime.id + '.chromiumapp.org/provider_cb',
         'access_token': token['access_token'],
         'refresh_token': token['refresh_token'],
-        'scope': 'my'
+        'scope': 'my,topic.read'
     }),
+    wsConnected = false,
     ICON_HAS_NOTIFICATION = 'images/icon-19.png',
     ICON_NO_NOTIFICATION = 'images/icon-19-off.png',
     ICON_NO_TOKEN = 'images/icon-19-notoken.png',
@@ -72,6 +73,7 @@ function refreshToken(token) {
 function clearToken() {
     typetalk.clearToken();
     delete localStorage['token'];
+    token = {};
 }
 
 function countNotifications(notifications) {
@@ -107,14 +109,18 @@ function checkUnreads() {
         updateBrowserActionButton(total > 0 ? ICON_HAS_NOTIFICATION : ICON_NO_NOTIFICATION, total);
     }).catch(function(err) {
         if (err.status === 400 || err.status === 401) {
-            typetalk.refreshAccessToken().then(function(token) {
-                refreshToken(token);
-                checkUnreads();
-            }, function() {
-                clearToken();
-                updateBrowserActionButton(ICON_NO_TOKEN);
-            });
+            refreshAccessToken();
         }
+    });
+}
+
+function refreshAccessToken() {
+    typetalk.refreshAccessToken().then(function(token) {
+        refreshToken(token);
+        checkUnreads();
+    }, function() {
+        clearToken();
+        updateBrowserActionButton(ICON_NO_TOKEN);
     });
 }
 
@@ -127,6 +133,72 @@ function authorize(successCallback, failedCallback) {
         clearToken();
         failedCallback && failedCallback();
     });
+}
+
+function connectStream() {
+    var token = loadToken(),
+        ws;
+
+    if (wsConnected || token.access_token == null) {
+        return;
+    }
+
+    ws = new WebSocket('wss://typetalk.in/api/v1/streaming?access_token=' + token.access_token);
+
+    ws.onopen = function(event) {
+        wsConnected = true;
+    };
+
+    ws.onclose = function(event) {
+        wsConnected = false;
+        setTimeout(connectStream, 1000 * 60 * 5);
+    };
+
+    ws.onmessage = function(event) {
+        if (event && event.data) {
+            processMessage(JSON.parse(event.data));
+        }
+    };
+
+    ws.onerror = function(event) {
+        console.error(event);
+        setTimeout(connectStream, 1000 * 60 * 3);
+    };
+}
+
+function processMessage(message) {
+    var filters = [
+        'addTalkPost',
+        'createTalk',
+        'createTopic',
+        'deleteMessage',
+        'deleteTalk',
+        'deleteTopic',
+        'joinTopics',
+        // 'likeMessage',
+        'notifyMention',
+        'postMessage',
+        'removeTalkPost',
+        'saveBookmark',
+        // 'unlikeMessage',
+        'updateTopic'
+    ];
+
+    if (filters.indexOf(message.type) > -1) {
+        checkUnreads();
+    }
+
+    /* TODO: add options
+    if (message.type === 'postMessage') {
+        var notificationOptions = {
+            type: 'basic',
+            title: message.data.topic.name + ' from ' + message.data.post.account.name,
+            message: message.data.post.message,
+            iconUrl: message.data.post.account.imageUrl
+        };
+        chrome.notifications.create('typetalk_notifications', notificationOptions);
+    }
+    */
 }
 
 function openTypetalkPage() {
@@ -146,5 +218,12 @@ chrome.browserAction.onClicked.addListener(function() {
     });
 });
 
-setInterval(checkUnreads, 1000 * 60 * 1);
-setTimeout(checkUnreads, 1000);
+setInterval(function() {
+    if (!wsConnected) {
+        checkUnreads();
+    }
+}, 1000 * 60 * 5);
+
+setTimeout(checkUnreads, 3000);
+
+connectStream();
