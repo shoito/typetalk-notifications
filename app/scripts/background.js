@@ -162,7 +162,9 @@ function connectStream() {
 
     ws.onerror = function(event) {
         console.error(event);
-        setTimeout(connectStream, 1000 * 60 * 3);
+
+        wsConnected = false;
+        ws.close();
     };
 }
 
@@ -226,4 +228,4 @@ setInterval(function() {
 
 setTimeout(checkUnreads, 3000);
 
-connectStream();
+// connectStream();
